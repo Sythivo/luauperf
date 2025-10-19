@@ -2,119 +2,123 @@
 
 -- Code based on https://github.com/luau-lang/luau/blob/6169fa15d85c766c108c90eb68289021b5eee705/tools/svg.py
 
-local Node = {};
-Node.__index = Node;
+local Node = {}
+Node.__index = Node
 
 function Node.new()
-    return setmetatable({
-        name = "",
-        children = {} :: { [string]: Node },
-        function_name = "",
-        source = "",
-        line = 0,
-        ticks = 0,
-        depth = 0,
-        width = 0,
-        offset = 0,
-    }, Node);
+	return setmetatable({
+		name = "",
+		children = {} :: { [string]: Node },
+		function_name = "",
+		source = "",
+		line = 0,
+		ticks = 0,
+		depth = 0,
+		width = 0,
+		offset = 0,
+	}, Node)
 end
 
-export type Node = typeof(Node.new());
+export type Node = typeof(Node.new())
 
 function Node.child(self: Node, name: string): Node
-    local node = self.children[name];
-    if (not node) then
-        node = Node.new();
-        assert(node)
-        node.name = name;
-        self.children[name] = node;
-    end
-    return node;
+	local node = self.children[name]
+	if not node then
+		node = Node.new()
+		assert(node)
+		node.name = name
+		self.children[name] = node
+	end
+	return node
 end
 
-function Node.subtree(self: Node): {Node}
-    local result: {Node} = {self};
-    local offset = 1;
+function Node.subtree(self: Node): { Node }
+	local result: { Node } = { self }
+	local offset = 1
 
-    while (offset <= #result) do
-        local p = result[offset];
-        offset += 1;
-        for _, c in p.children do
-            table.insert(result, c);
-        end
-    end
+	while offset <= #result do
+		local p = result[offset]
+		offset += 1
+		for _, c in p.children do
+			table.insert(result, c)
+		end
+	end
 
-    return result;
+	return result
 end
 
 function Node.text(self: Node): string
-    return self.function_name;
+	return self.function_name
 end
 
 function Node.title(self: Node): string
-    return string.format("%s\n%s:%d", self.function_name, self.source, self.line);
+	return string.format("%s\n%s:%d", self.function_name, self.source, self.line)
 end
 
 function Node.details(self: Node, root: Node): string
-    return string.format(
-        "Function: %s [%s:%d] (%d usec, %.1f%%); self: %d usec",
-        self.function_name,
-        self.source,
-        self.line,
-        self.width,
-        if root.width > 0 then (self.width / root.width * 100) else 0.0,
-        self.ticks
-    );
+	return string.format(
+		"Function: %s [%s:%d] (%d usec, %.1f%%); self: %d usec",
+		self.function_name,
+		self.source,
+		self.line,
+		self.width,
+		if root.width > 0 then (self.width / root.width * 100) else 0.0,
+		self.ticks
+	)
 end
 
 local function escape(s: string): string
-    return s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;");
+	return s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
 end
 
-local function reversed<T>(t: {T}): {T}
-    local result: {T} = {};
-    for i = #t, 1, -1 do
-        table.insert(result, t[i]);
-    end
-    return result;
+local function reversed<T>(t: { T }): { T }
+	local result: { T } = {}
+	for i = #t, 1, -1 do
+		table.insert(result, t[i])
+	end
+	return result
 end
 
-local function sorted<T>(t: {[any]: T}, key: (T) -> any, reverse: boolean?): {T}
-    local result: {T} = {};
-    for _, v in t do
-        table.insert(result, v);
-    end
-    table.sort(result, function(a: T, b: T): boolean
-        if (reverse) then
-            return key(a) > key(b);
-        else
-            return key(a) < key(b);
-        end
-    end)
-    return result;
+local function sorted<T>(t: { [any]: T }, key: (T) -> any, reverse: boolean?): { T }
+	local result: { T } = {}
+	for _, v in t do
+		table.insert(result, v)
+	end
+	table.sort(result, function(a: T, b: T): boolean
+		if reverse then
+			return key(a) > key(b)
+		else
+			return key(a) < key(b)
+		end
+	end)
+	return result
 end
 
 local function layout(root: Node, widthcb: (Node) -> number)
-    for _, n in reversed(root:subtree()) do
-        -- propagate width to the parent
-        n.width = widthcb(n);
-        for _, c in n.children do
-            n.width += c.width;
-        end
-        -- compute offset from parent for every child in width order (layout order)
-        local offset = 0;
-        for _, c in sorted(n.children, function(x: Node) return x.width end, true) do
-            c.offset = offset;
-            offset += c.width;
-        end
-    end
+	for _, n in reversed(root:subtree()) do
+		-- propagate width to the parent
+		n.width = widthcb(n)
+		for _, c in n.children do
+			n.width += c.width
+		end
+		-- compute offset from parent for every child in width order (layout order)
+		local offset = 0
+		for _, c in
+			sorted(n.children, function(x: Node)
+				return x.width
+			end, true)
+		do
+			c.offset = offset
+			offset += c.width
+		end
+	end
 
-    for _, n in root:subtree() do
-        for _, c in n.children do
-            c.depth = n.depth + 1;
-            c.offset += n.offset;
-        end
-    end
+	for _, n in root:subtree() do
+		for _, c in n.children do
+			c.depth = n.depth + 1
+			c.offset += n.offset
+		end
+	end
 end
 
 -- svg template (stolen from framegraph.pl)
@@ -489,101 +493,112 @@ local template = [===[<?xml version="1.0" standalone="no"?>
 <text id="matched" x="1090.00" y="$status" > </text>
 <text id="details" x="10.00" y="$status" > </text>
 <g id="frames">
-]===];
+]===]
 
 local function namehash(s: string): number
-    -- FNV-1a
-    local hval = 0x811c9dc5;
-    for i = 1, #s do
-        local ch = string.byte(s, i);
-        hval = bit32.bxor(hval, ch);
-        hval = (hval * 0x01000193) % (2 ^ 32);
-    end
-    return (hval % 31337) / 31337.0;
+	-- FNV-1a
+	local hval = 0x811c9dc5
+	for i = 1, #s do
+		local ch = string.byte(s, i)
+		hval = bit32.bxor(hval, ch)
+		hval = (hval * 0x01000193) % (2 ^ 32)
+	end
+	return (hval % 31337) / 31337.0
 end
 
 local function display(handle: FileHandle, root: Node, title: string, colors: string, flip: boolean?)
-    local gradient_start: string;
-    local gradient_end: string;
-    if colors == "cold" then
-        gradient_start = "#eef2ee";
-        gradient_end = "#e0ffe0";
-    else
-        gradient_start = "#eeeeee";
-        gradient_end = "#eeeeb0";
-    end
+	local gradient_start: string
+	local gradient_end: string
+	if colors == "cold" then
+		gradient_start = "#eef2ee"
+		gradient_end = "#e0ffe0"
+	else
+		gradient_start = "#eeeeee"
+		gradient_end = "#eeeeb0"
+	end
 
-    local maxdepth = 0;
-    for _, n in root:subtree() do
-        maxdepth = math.max(maxdepth, n.depth);
-    end
+	local maxdepth = 0
+	for _, n in root:subtree() do
+		maxdepth = math.max(maxdepth, n.depth)
+	end
 
-    local svgheight = maxdepth * 16 + 3 * 16 + 2 * 16;
+	local svgheight = maxdepth * 16 + 3 * 16 + 2 * 16
 
-    handle:append(
-        (template
-        :gsub("%$title", title)
-        :gsub("%$gradient%-start", gradient_start)
-        :gsub("%$gradient%-end", gradient_end)
-        :gsub("%$height", tostring(svgheight))
-        :gsub("%$status", tostring(if (flip) then (svgheight - 16 + 3) else (3 * 16 - 3)))
-        :gsub("%$flip", tostring(if (flip) then 1 else 0)))
-    );
-    handle:append("\n");
+	handle:append(
+		(
+			template
+				:gsub("%$title", title)
+				:gsub("%$gradient%-start", gradient_start)
+				:gsub("%$gradient%-end", gradient_end)
+				:gsub("%$height", tostring(svgheight))
+				:gsub("%$status", tostring(if flip then (svgheight - 16 + 3) else (3 * 16 - 3)))
+				:gsub("%$flip", tostring(if flip then 1 else 0))
+		)
+	)
+	handle:append("\n")
 
-    local framewidth = 1200 - 20;
+	local framewidth = 1200 - 20
 
-    local function pixels(x: number): number
-        return if root.width > 0 then (x / root.width) * framewidth else 0;
-    end
+	local function pixels(x: number): number
+		return if root.width > 0 then (x / root.width) * framewidth else 0
+	end
 
-    for _, n in root:subtree() do
-        if pixels(n.width) < 0.1 then
-            continue;
-        end
+	for _, n in root:subtree() do
+		if pixels(n.width) < 0.1 then
+			continue
+		end
 
-        local x = 10 + pixels(n.offset);
-        local y = (if flip then (maxdepth - 1 - n.depth) else n.depth) * 16 + 3 * 16;
-        local width = pixels(n.width);
-        local height = 15;
+		local x = 10 + pixels(n.offset)
+		local y = (if flip then (maxdepth - 1 - n.depth) else n.depth) * 16 + 3 * 16
+		local width = pixels(n.width)
+		local height = 15
 
-        local fillr, fillg, fillb;
-        if colors == "cold" then
-            fillr = 0;
-            fillg = math.floor(190 + 50 * namehash(n.name));
-            fillb = math.floor(210 * namehash(string.reverse(n.name)));
-        else
-            fillr = math.floor(205 + 50 * namehash(n.name));
-            fillg = math.floor(230 * namehash(string.reverse(n.name)));
-            fillb = math.floor(55 * namehash(string.reverse(string.reverse(n.name))));
-        end
+		local fillr, fillg, fillb
+		if colors == "cold" then
+			fillr = 0
+			fillg = math.floor(190 + 50 * namehash(n.name))
+			fillb = math.floor(210 * namehash(string.reverse(n.name)))
+		else
+			fillr = math.floor(205 + 50 * namehash(n.name))
+			fillg = math.floor(230 * namehash(string.reverse(n.name)))
+			fillb = math.floor(55 * namehash(string.reverse(string.reverse(n.name))))
+		end
 
-        local fill = string.format("rgb(%d,%d,%d)", fillr, fillg, fillb);
-        local chars = width / (12 * 0.59);
-        local text = n:text();
-        if chars >= 3 then
-            if chars < #text then
-                text = string.sub(text, 1, math.floor(chars - 2)) .. "..";
-            end
-        else
-            text = "";
-        end
-        handle:append("<g>\n");
-        handle:append("<title>" .. escape(n:title()) .. "</title>\n");
-        handle:append("<details>" .. escape(n:details(root)) .. "</details>\n");
-        handle:append(string.format("<rect x='%.2f' y='%.2f' width='%.2f' height='%.2f' fill='%s' rx='2' ry='2' />\n", x, y, width, height, fill));
-        handle:append(string.format("<text x='%.2f' y='%.2f'>%s</text>\n", x + 3, y + 10.5, escape(text)));
-        handle:append("<rawtext>" .. escape(n:text()) .. "</rawtext>\n");
-        handle:append("</g>\n");
-    end
-    handle:append("</g>\n</svg>\n");
+		local fill = string.format("rgb(%d,%d,%d)", fillr, fillg, fillb)
+		local chars = width / (12 * 0.59)
+		local text = n:text()
+		if chars >= 3 then
+			if chars < #text then
+				text = string.sub(text, 1, math.floor(chars - 2)) .. ".."
+			end
+		else
+			text = ""
+		end
+		handle:append("<g>\n")
+		handle:append("<title>" .. escape(n:title()) .. "</title>\n")
+		handle:append("<details>" .. escape(n:details(root)) .. "</details>\n")
+		handle:append(
+			string.format(
+				"<rect x='%.2f' y='%.2f' width='%.2f' height='%.2f' fill='%s' rx='2' ry='2' />\n",
+				x,
+				y,
+				width,
+				height,
+				fill
+			)
+		)
+		handle:append(string.format("<text x='%.2f' y='%.2f'>%s</text>\n", x + 3, y + 10.5, escape(text)))
+		handle:append("<rawtext>" .. escape(n:text()) .. "</rawtext>\n")
+		handle:append("</g>\n")
+	end
+	handle:append("</g>\n</svg>\n")
 end
 
 return {
-    Node = Node,
-    reversed = reversed,
-    escape = escape,
-    layout = layout,
-    template = template,
-    display = display,
+	Node = Node,
+	reversed = reversed,
+	escape = escape,
+	layout = layout,
+	template = template,
+	display = display,
 }
